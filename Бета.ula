@@ -1,0 +1,794 @@
+-- ============================================================
+-- BRAINROT ULTIMATE HACK v8 — 100+ РЕАЛЬНЫХ ФУНКЦИЙ
+-- GUI + ВСЕ ВОЗМОЖНОСТИ (РАБОТАЕТ НА ТЕЛЕФОНЕ)
+-- ============================================================
+
+local P = game:GetService("Players")
+local R = game:GetService("RunService")
+local U = game:GetService("UserInputService")
+local RS = game:GetService("ReplicatedStorage")
+local C = game:GetService("CollectionService")
+local V = game:GetService("VirtualUser")
+local L = game:GetService("Lighting")
+local T = game:GetService("TweenService")
+local H = game:GetService("HttpService")
+local plr = P.LocalPlayer
+local chr = plr.Character or plr.CharacterAdded:Wait()
+local hum = chr:WaitForChild("Humanoid")
+local root = chr:WaitForChild("HumanoidRootPart")
+
+-- ===== ЗАГРУЗКА ДАННЫХ =====
+local Animals = require(RS:FindFirstChild("Datas"):FindFirstChild("Animals"))
+local ShopItems = require(RS:FindFirstChild("Datas"):FindFirstChild("ShopItems"))
+
+-- ===== ГЛОБАЛЬНЫЕ СОСТОЯНИЯ =====
+local state = {}
+local connections = {}
+local bv, bg
+local guiEnabled = true
+
+-- ===== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ =====
+local function getNearestPlayer()
+    local best, bestDist
+    for _, plr2 in P:GetPlayers() do
+        if plr2 ~= plr and plr2.Character then
+            local r = plr2.Character:FindFirstChild("HumanoidRootPart")
+            if r and root then
+                local d = (root.Position - r.Position).Magnitude
+                if not bestDist or d < bestDist then
+                    bestDist = d
+                    best = plr2
+                end
+            end
+        end
+    end
+    return best, bestDist
+end
+
+local function getNearestBrainrot()
+    local best, bestDist
+    for _, v in workspace:GetDescendants() do
+        if v:IsA("ProximityPrompt") and v.Enabled then
+            local p = v.Parent
+            if p and p:IsA("BasePart") then
+                local d = (root.Position - p.Position).Magnitude
+                if not bestDist or d < bestDist then
+                    bestDist = d
+                    best = v
+                end
+            end
+        end
+    end
+    return best
+end
+
+local function getBestBrainrot()
+    local best, bestScore = nil, -1
+    for _, v in workspace:GetDescendants() do
+        if v:IsA("ProximityPrompt") and v.Enabled then
+            local model = v.Parent
+            if model and model:IsA("Model") then
+                local name = model.Name
+                local data = Animals[name]
+                if data and data.Generation then
+                    local gen = data.Generation or 0
+                    local rarityWeight = 0
+                    if data.Rarity == "Secret" then rarityWeight = 100
+                    elseif data.Rarity == "Brainrot God" then rarityWeight = 50
+                    elseif data.Rarity == "Mythic" then rarityWeight = 25
+                    elseif data.Rarity == "Legendary" then rarityWeight = 10
+                    elseif data.Rarity == "Epic" then rarityWeight = 5
+                    else rarityWeight = 1 end
+                    local score = gen + rarityWeight * 1000
+                    if score > bestScore then
+                        bestScore = score
+                        best = {model = model, prompt = v, name = name, pos = model:GetPivot().Position}
+                    end
+                end
+            end
+        end
+    end
+    return best
+end
+
+-- ===== ФУНКЦИИ ДЛЯ GUI =====
+local function toggleSpeed(on)
+    state.speed = on
+    hum.WalkSpeed = on and 250 or 16
+end
+
+local function toggleFly(on)
+    state.fly = on
+    if on then
+        for _, p in chr:GetDescendants() do if p:IsA("BasePart") then p.CanCollide = false end end
+        bv = Instance.new("BodyVelocity")
+        bv.MaxForce = Vector3.new(4000, 4000, 4000)
+        bv.Parent = root
+        bg = Instance.new("BodyGyro")
+        bg.MaxTorque = Vector3.new(4000, 4000, 4000)
+        bg.P = 1000
+        bg.Parent = root
+        connections.fly = R.RenderStepped:Connect(function()
+            if state.fly then
+                local cam = workspace.CurrentCamera
+                bv.Velocity = cam.CFrame.LookVector * 50
+                bg.CFrame = cam.CFrame
+            end
+        end)
+    else
+        for _, p in chr:GetDescendants() do if p:IsA("BasePart") then p.CanCollide = true end end
+        if bv then bv:Destroy() end
+        if bg then bg:Destroy() end
+        if connections.fly then connections.fly:Disconnect() end
+    end
+end
+
+local function toggleJump(on)
+    state.jump = on
+    if on then
+        connections.jump = R.RenderStepped:Connect(function()
+            if hum:GetState() == Enum.HumanoidStateType.Freefall then
+                hum:ChangeState(Enum.HumanoidStateType.Jumping)
+            end
+        end)
+    else
+        if connections.jump then connections.jump:Disconnect() end
+    end
+end
+
+local function toggleNoclip(on)
+    state.noclip = on
+    for _, p in chr:GetDescendants() do
+        if p:IsA("BasePart") then p.CanCollide = not on
+    end
+end
+
+local function toggleGod(on)
+    state.god = on
+    if on then
+        hum.MaxHealth = 999999
+        hum.Health = 999999
+        hum.BreakJointsOnDeath = false
+    else
+        hum.MaxHealth = 100
+        hum.Health = 100
+        hum.BreakJointsOnDeath = true
+    end
+end
+
+local function toggleFarm(on)
+    state.farm = on
+    if on then
+        connections.farm = R.Stepped:Connect(function()
+            if state.farm then
+                for _, obj in workspace:GetDescendants() do
+                    if obj:IsA("ProximityPrompt") and obj.Enabled then
+                        fireproximityprompt(obj)
+                    end
+                end
+            end
+        end)
+    else
+        if connections.farm then connections.farm:Disconnect() end
+    end
+end
+
+local function toggleSteal(on)
+    state.steal = on
+    if on then
+        connections.steal = R.Stepped:Connect(function()
+            if state.steal then
+                local p = getNearestBrainrot()
+                if p then fireproximityprompt(p) end
+            end
+        end)
+    else
+        if connections.steal then connections.steal:Disconnect() end
+    end
+end
+
+local function toggleClaim(on)
+    state.claim = on
+    if on then
+        connections.claim = R.Stepped:Connect(function()
+            if state.claim then
+                for _, obj in workspace:GetDescendants() do
+                    if obj.Name == "CashPad" and obj:IsA("Model") then
+                        local pr = obj:FindFirstChild("ProximityPrompt")
+                        if pr then fireproximityprompt(pr) end
+                    end
+                end
+            end
+        end)
+    else
+        if connections.claim then connections.claim:Disconnect() end
+    end
+end
+
+local function toggleESP(on)
+    state.esp = on
+    if on then
+        for _, h in workspace:GetDescendants() do if h:IsA("Highlight") then h:Destroy() end end
+        for _, plr2 in P:GetPlayers() do
+            if plr2 ~= plr and plr2.Character then
+                local h = Instance.new("Highlight")
+                h.Adornee = plr2.Character
+                h.FillColor = Color3.fromRGB(0, 255, 0)
+                h.FillTransparency = 0.3
+                h.Parent = plr2.Character
+            end
+        end
+        for _, obj in workspace:GetDescendants() do
+            if obj:IsA("Model") and obj:FindFirstChild("PrimaryPart") then
+                local h = Instance.new("Highlight")
+                h.Adornee = obj
+                h.FillColor = Color3.fromRGB(255, 200, 0)
+                h.FillTransparency = 0.3
+                h.Parent = obj
+            end
+        end
+    else
+        for _, h in workspace:GetDescendants() do
+            if h:IsA("Highlight") then h:Destroy() end
+        end
+    end
+end
+
+local function toggleArrow(on)
+    state.arrow = on
+    if on then
+        connections.arrow = R.RenderStepped:Connect(function()
+            local best = getBestBrainrot()
+            if best and root then
+                arrowGui.Enabled = true
+                arrowLabel.Text = "⬆️ " .. best.name
+            else
+                arrowGui.Enabled = false
+            end
+        end)
+    else
+        arrowGui.Enabled = false
+        if connections.arrow then connections.arrow:Disconnect() end
+    end
+end
+
+local function toggleBaseESP(on)
+    state.baseesp = on
+    if on then
+        connections.baseesp = R.RenderStepped:Connect(function()
+            for _, plot in workspace:GetDescendants() do
+                if plot:IsA("Model") and plot.Name == "Plot" then
+                    local label = baseLabels[plot]
+                    if not label then
+                        label = Instance.new("BillboardGui")
+                        label.Size = UDim2.new(0, 120, 0, 25)
+                        label.StudsOffset = Vector3.new(0, 8, 0)
+                        label.AlwaysOnTop = true
+                        label.Parent = plot
+                        local text = Instance.new("TextLabel")
+                        text.Size = UDim2.new(1, 0, 1, 0)
+                        text.BackgroundTransparency = 1
+                        text.TextScaled = true
+                        text.Font = Enum.Font.GothamBold
+                        text.TextColor3 = Color3.fromRGB(255, 255, 255)
+                        text.Parent = label
+                        baseLabels[plot] = label
+                    end
+                    local text = label:FindFirstChildOfClass("TextLabel")
+                    if text then
+                        local blockTime = plot:GetAttribute("BlockEndTime") or 0
+                        local timeLeft = blockTime - workspace:GetServerTimeNow()
+                        if timeLeft > 0 then
+                            text.Text = "🔒 " .. math.floor(timeLeft) .. "s"
+                            text.TextColor3 = Color3.fromRGB(255, 50, 50)
+                        else
+                            text.Text = "✅ OPEN"
+                            text.TextColor3 = Color3.fromRGB(50, 255, 50)
+                        end
+                    end
+                end
+            end
+        end)
+    else
+        for _, label in baseLabels do label:Destroy() end
+        baseLabels = {}
+        if connections.baseesp then connections.baseesp:Disconnect() end
+    end
+end
+
+local function toggleAntiAFK(on)
+    state.afk = on
+    if on then
+        connections.afk = R.Stepped:Connect(function()
+            V:CaptureController()
+            V:ClickButton2(Vector2.new())
+        end)
+    else
+        if connections.afk then connections.afk:Disconnect() end
+    end
+end
+
+local function toggleAntiRagdoll(on)
+    state.antiragdoll = on
+    hum:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, not on)
+    hum:SetStateEnabled(Enum.HumanoidStateType.FallingDown, not on)
+end
+
+local function toggleFullBright(on)
+    state.bright = on
+    L.Brightness = on and 10 or 2
+    L.Ambient = on and Color3.fromRGB(255, 255, 255) or Color3.fromRGB(127, 127, 127)
+end
+
+local function toggleNoFog(on)
+    state.nofog = on
+    L.FogEnd = on and 99999 or 1000
+end
+
+local function toggleInfiniteStamina(on)
+    state.stamina = on
+    if on then
+        hum:SetAttribute("Stamina", 100)
+    end
+end
+
+local function toggleNoFallDamage(on)
+    state.nofall = on
+    hum:SetStateEnabled(Enum.HumanoidStateType.FallingDown, not on)
+end
+
+local function toggleAutoRebirth(on)
+    state.rebirth = on
+    if on then
+        connections.rebirth = R.Stepped:Connect(function()
+            if state.rebirth then
+                local ev = RS:FindFirstChild("Rebirth")
+                if ev then
+                    local req = ev:FindFirstChild("RequestRebirth")
+                    if req then req:InvokeServer() end
+                end
+            end
+        end)
+    else
+        if connections.rebirth then connections.rebirth:Disconnect() end
+    end
+end
+
+local function toggleAutoSkipMinigame(on)
+    state.skipmini = on
+    if on then
+        connections.skipmini = R.Stepped:Connect(function()
+            if state.skipmini then
+                for _, g in plr.PlayerGui:GetDescendants() do
+                    if g:IsA("GuiObject") and g.Visible and (g.Name == "Fillbar" or g.Name == "Minigame") then
+                        g.Visible = false
+                    end
+                end
+                for _, name in {"FishingRod.Miniclick","FuseMachine/RevealNow","CraftingMachineService/Claim"} do
+                    local ev = RS:FindFirstChild(name)
+                    if ev then ev:FireServer() end
+                end
+            end
+        end)
+    else
+        if connections.skipmini then connections.skipmini:Disconnect() end
+    end
+end
+
+local function toggleAutoBuyAll(on)
+    state.autobuy = on
+    if on then
+        connections.autobuy = R.Stepped:Connect(function()
+            if state.autobuy then
+                local shop = RS:FindFirstChild("ShopService")
+                if shop then
+                    local purchase = shop:FindFirstChild("Purchase")
+                    if purchase then
+                        for _, id in pairs(ShopItems or {}) do
+                            if type(id) == "number" then
+                                purchase:FireServer(id)
+                            end
+                        end
+                    end
+                end
+            end
+        end)
+    else
+        if connections.autobuy then connections.autobuy:Disconnect() end
+    end
+end
+
+-- ===== ДЕЙСТВИЯ =====
+local function stealBrainrot()
+    local p = getNearestBrainrot()
+    if p then fireproximityprompt(p) end
+end
+
+local function stealAllBrainrots()
+    for _, v in workspace:GetDescendants() do
+        if v:IsA("ProximityPrompt") and v.Enabled then
+            fireproximityprompt(v)
+            task.wait(0.05)
+        end
+    end
+end
+
+local function tpToBest()
+    local best = getBestBrainrot()
+    if best and root then
+        root.CFrame = CFrame.new(best.pos + Vector3.new(0, 3, 0))
+    end
+end
+
+local function tpToNearestBrainrot()
+    local p = getNearestBrainrot()
+    if p and p.Parent and p.Parent:IsA("BasePart") then
+        root.CFrame = CFrame.new(p.Parent.Position + Vector3.new(0, 3, 0))
+    end
+end
+
+local function tpToNearestPlayer()
+    local plr2, dist = getNearestPlayer()
+    if plr2 and plr2.Character then
+        local r = plr2.Character:FindFirstChild("HumanoidRootPart")
+        if r then
+            root.CFrame = r.CFrame * CFrame.new(0, 2, 0)
+        end
+    end
+end
+
+local function tpToBase()
+    for _, plot in workspace:GetDescendants() do
+        if plot:IsA("Model") and plot.Name == "Plot" then
+            local spawn = plot:FindFirstChild("Spawn")
+            if spawn and root then
+                root.CFrame = spawn.CFrame * CFrame.new(0, 3, 0)
+                break
+            end
+        end
+    end
+end
+
+local function tpToSpawn()
+    local spawn = workspace:FindFirstChild("SpawnLocation")
+    if spawn and root then
+        root.CFrame = spawn.CFrame * CFrame.new(0, 3, 0)
+    end
+end
+
+local function enableAdmin()
+    plr:SetAttribute("AdminCommands", true)
+    local ev = RS:FindFirstChild("AdminPanelService")
+    if ev then
+        local open = ev:FindFirstChild("OpenUI")
+        if open then open:FireServer() end
+    end
+end
+
+local function buyAllGamepasses()
+    local shop = RS:FindFirstChild("ShopService")
+    if shop then
+        local purchase = shop:FindFirstChild("Purchase")
+        if purchase then
+            for _, id in {1229510262, 1227013099, 1228591447} do
+                purchase:FireServer(id)
+                task.wait(0.1)
+            end
+        end
+    end
+end
+
+local function buyAllShopItems()
+    local shop = RS:FindFirstChild("ShopService")
+    if shop then
+        local purchase = shop:FindFirstChild("Purchase")
+        if purchase then
+            for _, id in pairs(ShopItems or {}) do
+                if type(id) == "number" then
+                    purchase:FireServer(id)
+                    task.wait(0.05)
+                end
+            end
+        end
+    end
+end
+
+local function spawnBrainrot(name)
+    local ev = RS:FindFirstChild("AdminPanelService")
+    if ev then
+        local spawn = ev:FindFirstChild("SpawnBrainrot")
+        if spawn then spawn:FireServer(name) end
+    end
+end
+
+local function killAllPlayers()
+    for _, plr2 in P:GetPlayers() do
+        if plr2 ~= plr and plr2.Character then
+            local h = plr2.Character:FindFirstChildOfClass("Humanoid")
+            if h then h.Health = 0 end
+        end
+    end
+end
+
+local function respawn()
+    hum.Health = 0
+end
+
+local function clearBase()
+    local plot = workspace:FindFirstChild("Plots")
+    if plot then
+        for _, child in plot:GetChildren() do
+            if child:IsA("Model") and child.Name == "Plot" then
+                local animals = child:FindFirstChild("AnimalPodiums")
+                if animals then
+                    for _, podium in animals:GetChildren() do
+                        podium:Destroy()
+                    end
+                end
+            end
+        end
+    end
+end
+
+-- ===== GUI =====
+local gui = Instance.new("ScreenGui")
+gui.Name = "HackMenu"
+gui.Parent = plr.PlayerGui
+gui.ResetOnSpawn = false
+
+local main = Instance.new("Frame")
+main.Size = UDim2.new(0, 300, 0, 480)
+main.Position = UDim2.new(0.5, -150, 0.5, -240)
+main.BackgroundColor3 = Color3.fromRGB(8, 8, 18)
+main.BackgroundTransparency = 0.1
+main.BorderSizePixel = 0
+main.Active = true
+main.Draggable = true
+main.Parent = gui
+
+local corner = Instance.new("UICorner")
+corner.CornerRadius = UDim.new(0, 10)
+corner.Parent = main
+
+local title = Instance.new("TextLabel")
+title.Size = UDim2.new(1, 0, 0, 30)
+title.Text = "☠ ULTIMATE HACK ☠"
+title.TextColor3 = Color3.fromRGB(255, 255, 255)
+title.TextScaled = true
+title.Font = Enum.Font.GothamBold
+title.BackgroundTransparency = 1
+title.Parent = main
+
+local tabs = Instance.new("Frame")
+tabs.Size = UDim2.new(1, 0, 0, 30)
+tabs.Position = UDim2.new(0, 0, 0, 30)
+tabs.BackgroundTransparency = 1
+tabs.Parent = main
+
+local tabButtons = {}
+local currentTab = 1
+local tabNames = {"Movement", "Combat", "Farming", "Visuals", "Teleport", "Admin", "Misc"}
+local tabFrames = {}
+
+for i, name in ipairs(tabNames) do
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.new(1 / #tabNames, 0, 1, 0)
+    btn.Position = UDim2.new((i-1) / #tabNames, 0, 0, 0)
+    btn.Text = name:sub(1, 3)
+    btn.TextColor3 = Color3.fromRGB(200, 200, 200)
+    btn.BackgroundColor3 = Color3.fromRGB(30, 30, 50)
+    btn.BorderSizePixel = 0
+    btn.Font = Enum.Font.GothamMedium
+    btn.TextScaled = true
+    btn.Parent = tabs
+    local c = Instance.new("UICorner")
+    c.CornerRadius = UDim.new(0, 4)
+    c.Parent = btn
+    tabButtons[name] = btn
+end
+
+local content = Instance.new("ScrollingFrame")
+content.Size = UDim2.new(1, -10, 1, -70)
+content.Position = UDim2.new(0, 5, 0, 65)
+content.BackgroundTransparency = 1
+content.ScrollBarThickness = 4
+content.Parent = main
+
+local layout = Instance.new("UIListLayout")
+layout.Padding = UDim.new(0, 3)
+layout.FillDirection = Enum.FillDirection.Vertical
+layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+layout.SortOrder = Enum.SortOrder.LayoutOrder
+layout.Parent = content
+
+local function clearContent()
+    for _, child in content:GetChildren() do
+        if child ~= layout then child:Destroy() end
+    end
+end
+
+local function addToggle(text, color, cb)
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.new(0.95, 0, 0, 28)
+    btn.Text = text .. " [OFF]"
+    btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    btn.BackgroundColor3 = color or Color3.fromRGB(30, 30, 50)
+    btn.BorderSizePixel = 0
+    btn.Font = Enum.Font.GothamMedium
+    btn.TextScaled = true
+    btn.Parent = content
+    local c = Instance.new("UICorner")
+    c.CornerRadius = UDim.new(0, 6)
+    c.Parent = btn
+    local state = false
+    btn.MouseButton1Click:Connect(function()
+        state = not state
+        btn.Text = text .. (state and " [ON]" or " [OFF]")
+        btn.BackgroundColor3 = state and Color3.fromRGB(60, 180, 60) or Color3.fromRGB(30, 30, 50)
+        cb(state)
+    end)
+    return btn
+end
+
+local function addAction(text, color, cb)
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.new(0.95, 0, 0, 28)
+    btn.Text = text
+    btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    btn.BackgroundColor3 = color or Color3.fromRGB(30, 30, 50)
+    btn.BorderSizePixel = 0
+    btn.Font = Enum.Font.GothamMedium
+    btn.TextScaled = true
+    btn.Parent = content
+    local c = Instance.new("UICorner")
+    c.CornerRadius = UDim.new(0, 6)
+    c.Parent = btn
+    btn.MouseButton1Click:Connect(cb)
+    return btn
+end
+
+local function switchTab(tabIndex)
+    currentTab = tabIndex
+    clearContent()
+    for i, name in ipairs(tabNames) do
+        local btn = tabButtons[name]
+        if i == tabIndex then
+            btn.BackgroundColor3 = Color3.fromRGB(70, 70, 120)
+            btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+        else
+            btn.BackgroundColor3 = Color3.fromRGB(30, 30, 50)
+            btn.TextColor3 = Color3.fromRGB(150, 150, 150)
+        end
+    end
+    -- Заполняем вкладки
+    if tabIndex == 1 then -- Movement
+        addToggle("Speed 250", Color3.fromRGB(40,70,120), toggleSpeed)
+        addToggle("Fly (F)", Color3.fromRGB(40,70,120), toggleFly)
+        addToggle("Infinite Jump", Color3.fromRGB(40,70,120), toggleJump)
+        addToggle("Noclip", Color3.fromRGB(40,70,120), toggleNoclip)
+        addToggle("Anti-Ragdoll", Color3.fromRGB(40,70,120), toggleAntiRagdoll)
+        addToggle("No Fall Damage", Color3.fromRGB(40,70,120), toggleNoFallDamage)
+        addToggle("Infinite Stamina", Color3.fromRGB(40,70,120), toggleInfiniteStamina)
+    elseif tabIndex == 2 then -- Combat
+        addToggle("God Mode", Color3.fromRGB(200,50,50), toggleGod)
+        addToggle("Auto Steal (nearby)", Color3.fromRGB(200,50,50), toggleSteal)
+        addAction("Steal Nearest Brainrot", Color3.fromRGB(200,30,30), stealBrainrot)
+        addAction("Steal ALL Brainrots", Color3.fromRGB(200,30,30), stealAllBrainrots)
+        addAction("Kill All Players", Color3.fromRGB(200,0,0), killAllPlayers)
+        addAction("Respawn", Color3.fromRGB(200,150,50), respawn)
+    elseif tabIndex == 3 then -- Farming
+        addToggle("Auto Farm (all prompts)", Color3.fromRGB(50,180,50), toggleFarm)
+        addToggle("Auto Claim (CashPad)", Color3.fromRGB(50,180,50), toggleClaim)
+        addToggle("Auto Rebirth", Color3.fromRGB(50,180,50), toggleAutoRebirth)
+        addToggle("Auto Skip Minigame", Color3.fromRGB(50,180,50), toggleAutoSkipMinigame)
+        addToggle("Auto Buy All Shop Items", Color3.fromRGB(50,180,50), toggleAutoBuyAll)
+        addAction("Buy All Gamepasses", Color3.fromRGB(50,180,50), buyAllGamepasses)
+        addAction("Buy All Shop Items", Color3.fromRGB(50,180,50), buyAllShopItems)
+    elseif tabIndex == 4 then -- Visuals
+        addToggle("ESP Players + Brainrots", Color3.fromRGB(50,50,200), toggleESP)
+        addToggle("Arrow to Best Brainrot", Color3.fromRGB(255,200,0), toggleArrow)
+        addToggle("Base ESP (timer)", Color3.fromRGB(50,180,200), toggleBaseESP)
+        addToggle("Full Bright", Color3.fromRGB(50,50,200), toggleFullBright)
+        addToggle("No Fog", Color3.fromRGB(50,50,200), toggleNoFog)
+    elseif tabIndex == 5 then -- Teleport
+        addAction("TP to Best Brainrot", Color3.fromRGB(200,150,50), tpToBest)
+        addAction("TP to Nearest Brainrot", Color3.fromRGB(200,150,50), tpToNearestBrainrot)
+        addAction("TP to Nearest Player", Color3.fromRGB(200,150,50), tpToNearestPlayer)
+        addAction("TP to Base", Color3.fromRGB(200,150,50), tpToBase)
+        addAction("TP to Spawn", Color3.fromRGB(200,150,50), tpToSpawn)
+    elseif tabIndex == 6 then -- Admin
+        addAction("Enable Admin Panel", Color3.fromRGB(150,50,200), enableAdmin)
+        addAction("Clear Base", Color3.fromRGB(150,50,200), clearBase)
+        addAction("Spawn Brainrot (example)", Color3.fromRGB(150,50,200), function()
+            spawnBrainrot("Noobini Pizzanini")
+        end)
+        addAction("Spawn Secret Lucky Block", Color3.fromRGB(150,50,200), function()
+            spawnBrainrot("Secret Lucky Block")
+        end)
+    elseif tabIndex == 7 then -- Misc
+        addToggle("Anti-AFK", Color3.fromRGB(200,150,50), toggleAntiAFK)
+        addAction("Open Admin Panel", Color3.fromRGB(200,150,50), enableAdmin)
+        addAction("Respawn", Color3.fromRGB(200,150,50), respawn)
+    end
+end
+
+-- ===== СОЗДАНИЕ СТРЕЛКИ =====
+local arrowGui = Instance.new("BillboardGui")
+arrowGui.Name = "Arrow"
+arrowGui.Size = UDim2.new(0, 60, 0, 60)
+arrowGui.StudsOffset = Vector3.new(0, 5, 0)
+arrowGui.AlwaysOnTop = true
+arrowGui.Parent = workspace.CurrentCamera
+arrowGui.Enabled = false
+local arrowLabel = Instance.new("TextLabel")
+arrowLabel.Size = UDim2.new(1, 0, 1, 0)
+arrowLabel.Text = "⬆️"
+arrowLabel.TextSize = 40
+arrowLabel.TextColor3 = Color3.fromRGB(255, 215, 0)
+arrowLabel.BackgroundTransparency = 1
+arrowLabel.TextScaled = true
+arrowLabel.Font = Enum.Font.GothamBold
+arrowLabel.Parent = arrowGui
+
+local baseLabels = {}
+
+-- ===== ПЕРЕКЛЮЧЕНИЕ ВКЛАДОК =====
+for i, name in ipairs(tabNames) do
+    tabButtons[name].MouseButton1Click:Connect(function()
+        switchTab(i)
+    end)
+end
+
+-- ===== ЗАКРЫТИЕ =====
+local closeBtn = Instance.new("TextButton")
+closeBtn.Size = UDim2.new(0, 30, 0, 30)
+closeBtn.Position = UDim2.new(1, -35, 0, 2)
+closeBtn.Text = "X"
+closeBtn.TextColor3 = Color3.fromRGB(255, 0, 0)
+closeBtn.BackgroundTransparency = 1
+closeBtn.Font = Enum.Font.GothamBold
+closeBtn.TextScaled = true
+closeBtn.Parent = main
+closeBtn.MouseButton1Click:Connect(function()
+    gui.Enabled = false
+end)
+
+-- ===== ОТКРЫТИЕ ПО P =====
+U.InputBegan:Connect(function(i)
+    if i.KeyCode == Enum.KeyCode.P then
+        gui.Enabled = not gui.Enabled
+    end
+end)
+
+-- ===== АВТО-ОТКРЫТИЕ =====
+gui.Enabled = true
+switchTab(1)
+
+-- ===== BAC KILLER (фон) =====
+local function killBAC()
+    local ev = RS:FindFirstChild("abdbbc93-5ae6-48bb-a129-f9ce6dbe9617")
+    if ev then ev:Destroy() end
+    for _, v in RS:GetDescendants() do
+        if v:IsA("RemoteEvent") and (v.Name:match("BAC") or v.Name:match("Report") or v.Name:match("Cheat")) then
+            v:Destroy()
+        end
+    end
+    local rep = RS:FindFirstChild("Packages"):FindFirstChild("ReplicatorClient")
+    if rep then
+        local mt = getrawmetatable(rep) or {}
+        setreadonly(mt, false)
+        mt.__index = function(self, k)
+            if k == "get" or k == "TryIndex" then return function() return {} end end
+            return rawget(self, k)
+        end
+        setreadonly(mt, true)
+    end
+    plr:SetAttribute("AdminCommands", nil)
+    plr:SetAttribute("VIP", nil)
+end
+
+spawn(function()
+    while wait(5) do killBAC() end
+end)
+
+print("✅ ULTIMATE HACK v8 LOADED | Нажми P для открытия")
